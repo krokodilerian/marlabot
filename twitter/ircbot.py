@@ -175,9 +175,21 @@ class TwitterBot(object):
         for update in updates:
             crt = parsedate(update['created_at'])
             if (crt > nextLastUpdate):
+                text = update['text']
+
+                # it's a retweet, get text from original post
+                if 'retweeted_status' in update:
+                    retweeted_status = update['retweeted_status']
+                    text = 'RT @' + retweeted_status['user']['screen_name'] + ': ' + retweeted_status['text']
+
                 text = (htmlentitydecode(
-                    update['text'].replace('\n', ' '))
+                    text.replace('\n', ' '))
                     .encode('utf8', 'replace'))
+
+                # hack for _SofiaBG annoying underscore
+                screen_name = update['user']['screen_name']
+                if screen_name == '_SofiaBG':
+                    screen_name = 'SofiaBG'
 
                 # Skip updates beginning with @
                 # TODO This would be better if we only ignored messages
@@ -185,9 +197,9 @@ class TwitterBot(object):
                 if not text.startswith(b"@"):
                     msg = "%s %s%s%s %s" %(
                         get_prefix(),
-                        IRC_BOLD, update['user']['screen_name'],
+                        IRC_BOLD, screen_name,
                         IRC_BOLD, text.decode('utf8'))
-                    self.privmsg_channels(msg)
+                    self.notice_channels(msg)
 
                 nextLastUpdate = crt
 
@@ -207,7 +219,7 @@ class TwitterBot(object):
             elif (args[0] == 'unfollow' and args[1:]):
                 self.unfollow(conn, evt, args[1])
             else:
-                conn.privmsg(
+                conn.notice(
                     evt.source().split('!')[0],
                     "%sHi! I'm Twitterbot! you can (follow "
                     "<twitter_name>) to make me follow a user or "
@@ -245,28 +257,54 @@ class TwitterBot(object):
         channels=self.config.get('irc','channel').split(',')
         return self.ircServer.privmsg_many(channels, msg.encode('utf8'))
 
+    def split_utf8_at_space(self, s, n):
+        if len(s) <= n:
+                return s, None
+        oldn = n
+        while ord(s[n]) != 0x20 and n > 0:
+            n -= 1
+        if n == 0:
+            n = oldn
+            while ord(s[n]) >= 0x80 and ord(s[n]) < 0xc0:
+                n -= 1
+        return s[0:n], s[n:]
+
+    def notice_channels(self, msg):
+        """
+            Send a notice and split it into multiple notices if needed.
+            This is according to IRC max message length (512 - 2 for CR/LF)
+        """
+        return_response=True
+        channels = self.config.get('irc','channel').split(',')
+        txt = "NOTICE %s :" % (",".join(channels))
+        chunks = self.split_utf8_at_space(msg.strip().encode('utf8'), 510 - len(txt))
+        for chunk in chunks:
+            if chunk != None:
+                res = self.ircServer.send_raw(txt + chunk)
+        return res
+
     def follow(self, conn, evt, name):
         userNick = evt.source().split('!')[0]
         friends = [x['name'] for x in self.twitter.statuses.friends()]
         debug("Current friends: %s" %(friends))
         if (name in friends):
-            conn.privmsg(
+            conn.notice(
                 userNick,
                 "%sI'm already following %s." %(get_prefix('error'), name))
         else:
             try:
                 self.twitter.friendships.create(id=name)
             except TwitterError:
-                conn.privmsg(
+                conn.notice(
                     userNick,
                     "%sI can't follow that user. Are you sure the name is correct?" %(
                         get_prefix('error')
                         ))
                 return
-            conn.privmsg(
+            conn.notice(
                 userNick,
                 "%sOkay! I'm now following %s." %(get_prefix('followed'), name))
-            self.privmsg_channels(
+            self.notice_channels(
                 "%s%s has asked me to start following %s" %(
                     get_prefix('inform'), userNick, name))
 
@@ -275,16 +313,16 @@ class TwitterBot(object):
         friends = [x['name'] for x in self.twitter.statuses.friends()]
         debug("Current friends: %s" %(friends))
         if (name not in friends):
-            conn.privmsg(
+            conn.notice(
                 userNick,
                 "%sI'm not following %s." %(get_prefix('error'), name))
         else:
             self.twitter.friendships.destroy(id=name)
-            conn.privmsg(
+            conn.notice(
                 userNick,
                 "%sOkay! I've stopped following %s." %(
                     get_prefix('stop_follow'), name))
-            self.privmsg_channels(
+            self.notice_channels(
                 "%s%s has asked me to stop following %s" %(
                     get_prefix('inform'), userNick, name))
 
