@@ -148,7 +148,7 @@ class TwitterBot(object):
         self.twitter = Twitter(
             auth=OAuth(
                 oauth_token, oauth_secret, CONSUMER_KEY, CONSUMER_SECRET),
-            api_version='1',
+            api_version='1.1',
             domain='api.twitter.com')
 
         self.irc = irclib.IRC()
@@ -165,7 +165,7 @@ class TwitterBot(object):
     def check_statuses(self):
         debug("In check_statuses")
         try:
-            updates = reversed(self.twitter.statuses.friends_timeline())
+            updates = self.twitter.statuses.home_timeline()
         except Exception as e:
             print("Exception while querying twitter:", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
@@ -321,7 +321,7 @@ def load_config(filename):
     cp.add_section('irc')
     cp.set('irc', 'port', '6667')
     cp.set('irc', 'nick', 'twitterbot')
-    cp.set('irc', 'prefixes', 'cats')
+    cp.set('irc', 'prefixes', 'none')
     cp.add_section('twitter')
     cp.set('twitter', 'oauth_token_file', OAUTH_FILE)
 

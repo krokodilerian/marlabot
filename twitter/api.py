@@ -156,6 +156,8 @@ class TwitterCall(object):
             # If this part matches a keyword argument, use the
             # supplied value otherwise, just use the part.
             uriparts.append(str(kwargs.pop(uripart, uripart)))
+            print str(kwargs.pop(uripart, uripart))
+            print " _ "
         uri = '/'.join(uriparts)
 
         method = kwargs.pop('_method', None)
@@ -187,8 +189,8 @@ class TwitterCall(object):
         dot = ""
         if self.format:
             dot = "."
-        uriBase = "http%s://%s/%s%s%s" %(
-                    secure_str, self.domain, uri, dot, self.format)
+        uriBase = "https://api.twitter.com/%s%s%s" %(
+                    uri, dot, self.format)
 
         headers = {'Accept-Encoding': 'gzip'}
         if self.auth:
