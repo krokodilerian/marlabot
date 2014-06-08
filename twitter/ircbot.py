@@ -19,6 +19,7 @@ port: <irc_port>
 nick: <irc_nickname>
 channel: <irc_channels_to_join>
 prefixes: <prefix_type>
+expandlinks: * or comma separated list of hostnames (e.g. "*", "t.co,bit.ly")
 
 [twitter]
 oauth_token_file: <oauth_token_filename>
@@ -62,7 +63,7 @@ import os.path
 from .api import Twitter, TwitterError
 from .oauth import OAuth, read_token_file
 from .oauth_dance import oauth_dance
-from .util import htmlentitydecode
+from .util import htmlentitydecode, expand_line
 
 PREFIXES = dict(
     cats=dict(
@@ -151,6 +152,8 @@ class TwitterBot(object):
             api_version='1.1',
             domain='api.twitter.com')
 
+        self.expand_links = self.config.get('irc', 'expandlinks').split(',')
+
         self.irc = irclib.IRC()
         self.irc.add_global_handler('privmsg', self.handle_privmsg)
         self.irc.add_global_handler('ctcp', self.handle_ctcp)
@@ -186,10 +189,16 @@ class TwitterBot(object):
                     text.replace('\n', ' '))
                     .encode('utf8', 'replace'))
 
-                # hack for _SofiaBG annoying underscore
+                # expand http://t.co/XXXXXX to http://bla.foo/bar
+                # note: the bot is autosplitting lines so no worry
+                if self.expand_links:
+                    text = expand_line(text,
+                                       sites=self.expand_links,
+                                       expand_limit=480)
+
                 screen_name = update['user']['screen_name']
-                if screen_name == '_SofiaBG':
-                    screen_name = 'SofiaBG'
+                # hack for _USERNAME annoying underscore
+                screen_name = screen_name.strip('_')
 
                 # Skip updates beginning with @
                 # TODO This would be better if we only ignored messages
@@ -360,6 +369,7 @@ def load_config(filename):
     cp.set('irc', 'port', '6667')
     cp.set('irc', 'nick', 'twitterbot')
     cp.set('irc', 'prefixes', 'none')
+    cp.set('irc', 'expandlinks' ,'')
     cp.add_section('twitter')
     cp.set('twitter', 'oauth_token_file', OAUTH_FILE)
 
@@ -402,3 +412,6 @@ def main():
 
     bot = TwitterBot(configFilename)
     return bot.run()
+
+if __name__ == '__main__':
+    main()
