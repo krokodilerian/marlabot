@@ -89,13 +89,25 @@ def find_links(line):
     regex = "(https?://[^ )]+)"
     return (
         re.sub(regex, "%s", l),
-        [m.group(1) for m in re.finditer(regex, l)])
+        [m.group(1).replace('%%', '%') for m in re.finditer(regex, l)])
 
-def follow_redirects(link, sites= None):
+def follow_redirects(link, sites=None):
     """Follow directs for the link as long as the redirects are on the given
     sites and return the resolved link."""
     def follow(url):
-        return sites == None or urlparse.urlparse(url).hostname in sites
+        return sites == None or sites == ['*'] or urlparse.urlparse(url).hostname in sites
+
+    # Note:
+    # This can be done easier with python-requests,
+    # but that would mean one more dependency.
+    # This seems to work so leave it for now
+    ## requests code (untested)
+    #try:
+    #    r = requests.head(url, timeout=2)
+    #    r.raise_for_status()
+    #    return r.url
+    #except (requests.exceptions.RequestException, IOError):
+    #    return url
 
     class RedirectHandler(urllib2.HTTPRedirectHandler):
         def __init__(self):
@@ -121,11 +133,17 @@ def follow_redirects(link, sites= None):
     except (urllib2.HTTPError, urllib2.URLError):
         return redirect_handler.last_url if redirect_handler.last_url else link
 
-def expand_line(line, sites):
-    """Expand the links in the line for the given sites."""
+def expand_line(line, sites, expand_limit=480):
+    """Expand the links in the line for the given sites.
+
+    If expand_limit is true, do not expand links if they are longer that it.
+    """
     l = line.strip()
     msg_format, links = find_links(l)
-    args = tuple(follow_redirects(l, sites) for l in links)
+    args = tuple(((expand_limit and (len(expanded) > expand_limit))
+                    and link or expanded)
+                 for (expanded, link) in
+                 ((follow_redirects(l, sites), l) for l in links))
     return msg_format % args
 
 def parse_host_list(list_of_hosts):
